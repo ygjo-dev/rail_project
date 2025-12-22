@@ -2,7 +2,7 @@ from py2neo import Graph, Node, Relationship
 import json
 from pyproj import Transformer
 
-# Neo4j 연결 (Bolt URI, 계정/비밀번호 수정)
+# Neo4j 연결
 graph = Graph("bolt://neo4j:7687", auth=("neo4j", "password"))
 
 # GeoJSON 읽기
@@ -22,7 +22,7 @@ for feature in geojson_data['features']:
     start_lon, start_lat = transformer.transform(start_x, start_y)
     end_lon, end_lat = transformer.transform(end_x, end_y)
 
-    # Station 노드 생성 (중복 방지)
+    # Station 노드 생성 
     start_station = Node("Station",
                          name=props["F_NAME"],
                          code=props["AF_F_N"],
@@ -37,16 +37,16 @@ for feature in geojson_data['features']:
     graph.merge(start_station, "Station", "code")
     graph.merge(end_station, "Station", "code")
 
-    # RailLine 노드 생성 (중복 방지)
+    # RailLine 노드 생성
     line_name = props.get("R_NAME_1") or "Unknown Line"
     rail_line = Node("RailLine", name=line_name)
     graph.merge(rail_line, "RailLine", "name")
 
-    # 역 ↔ 노선 연결
+    # 역 <-> 노선 연결
     graph.merge(Relationship(start_station, "ON_LINE", rail_line))
     graph.merge(Relationship(end_station, "ON_LINE", rail_line))
 
-    # 역 ↔ 역 관계 (양방향)
+    # 역 <-> 역 관계
     connect_props = {
         "avg_dist": props["AVG_DIST"],
         "avg_time": props["AVG_TIME"],
@@ -59,4 +59,4 @@ for feature in geojson_data['features']:
     graph.merge(rel1)
     graph.merge(rel2)
 
-print("GeoJSON → Neo4j 삽입 완료!")
+print("GeoJSON → Neo4j 완료!")

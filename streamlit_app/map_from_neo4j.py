@@ -2,76 +2,106 @@ import streamlit as st
 from py2neo import Graph
 import folium
 from streamlit_folium import st_folium
-from transformers import pipeline
+import ollama
+import time
 
-generator = pipeline("text-generation", model="/root/models/gpt4all-lora-quantized.bin", device=-1)
+# Ollama API 주소
+ollama.api_url = "http://ollama-env:11434"
 
-
-def ask_llm(prompt, max_tokens=200):
-    result = generator(prompt, max_new_tokens=max_tokens)
-    return result[0]["generated_text"]
-
-# -------------------------------
-# 2️⃣ Streamlit 페이지 설정
-# -------------------------------
-st.set_page_config(layout="wide")
-st.title("Neo4j 지도 + 로컬 LLM 챗봇 (GPT4All HuggingFace)")
-
-# -------------------------------
-# 3️⃣ Neo4j 연결
-# -------------------------------
+# Neo4j 연결
 graph = Graph("bolt://neo4j:7687", auth=("neo4j", "password"))
 
-# -------------------------------
-# 4️⃣ 지도 생성
-# -------------------------------
+# Streamlit 설정
+st.set_page_config(layout="wide")
+st.title("Neo4j DB 챗봇 질의")
+
+# 지도 시각화
 stations = graph.run("""
     MATCH (s:Station)
-    RETURN s.name AS name, s.code AS code, s.lat AS lat, s.lon AS lon, s.isKTX AS isKTX
+    WHERE s.lat IS NOT NULL AND s.lon IS NOT NULL
+    RETURN s.name AS name, s.lat AS lat, s.lon AS lon
 """).data()
 
 m = folium.Map(location=[37.5665, 126.9780], zoom_start=7)
-for station in stations:
-    popup_text = f"""
-    <b>{station['name']}</b><br>
-    코드: {station['code']}<br>
-    KTX 여부: {'O' if station['isKTX'] else 'X'}
-    """
+
+for s in stations:
     folium.Marker(
-        location=[station['lat'], station['lon']],
-        popup=popup_text,
-        icon=folium.Icon(color='blue', icon='train', prefix='fa')
+        location=[s["lat"], s["lon"]],
+        popup=s["name"],
+        icon=folium.Icon(color="blue", icon="train", prefix="fa")
     ).add_to(m)
 
-st_folium(m, width=700, height=500)
+st_folium(m, width=750, height=500)
 
-# -------------------------------
-# 4️⃣ LLM 챗봇
-# -------------------------------
-st.sidebar.header("LLM 챗봇 질문")
-user_question = st.sidebar.text_input("질문을 입력하세요:", "")
+# UI
+st.sidebar.header("철도 연결 질문")
+user_question = st.sidebar.text_input(
+    "예: 경부고속선으로 광명에서 서울 가나?"
+)
 
 if user_question:
-    # 1️⃣ 질문 → Cypher 쿼리 생성
-    prompt_cypher = f"""
-Neo4j 그래프 DB에는 철도역 Station 노드가 있습니다.
-사용자의 질문을 바탕으로 Cypher 쿼리를 만들어주세요.
-질문: "{user_question}"
-"""
-    cypher_query = ask_llm(prompt_cypher)
+    start_time = time.perf_counter()
 
-    # 2️⃣ Neo4j 실행
     try:
-        result = graph.run(cypher_query).data()
-    except Exception as e:
-        result = f"쿼리 실행 중 오류: {e}"
+        # 1. LLM: 역 이름만 추출
+        prompt_extract = f"""
+질문에서 출발역과 도착역 이름만 추출하라.
 
-    # 3️⃣ Cypher 결과 → 자연스러운 답변 생성
-    prompt_answer = f"""
-사용자 질문: "{user_question}"
-Cypher 결과: {result}
-위 정보를 바탕으로 자연스럽게 답변을 만들어 주세요.
+규칙:
+- 역 이름만 출력
+- 괄호 포함 허용
+- 한국어 그대로
+- JSON 형식만 출력
+
+형식:
+{{"from": "...", "to": "..."}}
+
+질문:
+"{user_question}"
 """
-    answer = ask_llm(prompt_answer)
 
-    st.sidebar.text_area("💬 답변", value=answer, height=150)
+        extract_resp = ollama.chat(
+            model="llama3",
+            messages=[
+                {"role": "system", "content": "역 이름만 추출한다."},
+                {"role": "user", "content": prompt_extract}
+            ]
+        )
+
+        extracted = extract_resp["message"]["content"]
+        st.sidebar.subheader("LLM 추출 결과 (Debug.1)")
+        st.sidebar.code(extracted, language="json")
+
+        data = eval(extracted)
+        start_kw = data["from"]
+        end_kw = data["to"]
+
+        # 2. 고정된 Cypher
+        cypher_query = f"""
+        MATCH (a:Station)-[:CONNECTS]->(b:Station)
+        WHERE a.name CONTAINS "{start_kw}"
+          AND b.name CONTAINS "{end_kw}"
+        RETURN count(*) > 0 AS is_connected
+        """
+
+        st.sidebar.subheader("실행 Cypher (Debug.2)")
+        st.sidebar.code(cypher_query, language="cypher")
+
+        result = graph.run(cypher_query).data()
+        is_connected = result and result[0]["is_connected"]
+
+        elapsed = time.perf_counter() - start_time
+
+        # 3. 출력
+        if is_connected:
+            st.sidebar.success("두 역은 연결되어 있습니다.")
+        else:
+            st.sidebar.warning("두 역은 연결되어 있지 않습니다.")
+
+        st.sidebar.info(f"처리 시간: {elapsed:.2f}초")
+
+    except Exception as e:
+        elapsed = time.perf_counter() - start_time
+        st.sidebar.error("오류 발생")
+        st.sidebar.code(str(e))
+        st.sidebar.info(f"처리 시간: {elapsed:.2f}초")
