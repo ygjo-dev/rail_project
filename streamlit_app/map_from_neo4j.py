@@ -1,17 +1,34 @@
+import os
+import json
+import time
 import streamlit as st
 from py2neo import Graph
 import folium
 from streamlit_folium import st_folium
 import ollama
-import time
 
-# Ollama API 주소
-ollama.api_url = "http://ollama-env:11434"
+# -----------------------------
+# 환경 변수 및 설정 파일 로드
+# -----------------------------
+CONFIG_FILE = os.environ.get("CONFIG_FILE", "../config/config.json")
+with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+    cfg = json.load(f)
+
+OLLAMA_API_URL = os.environ.get("OLLAMA_API_URL", cfg["ollama_api_url"])
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", cfg["ollama_model"])
+NEO4J_URI = os.environ.get("NEO4J_URI", cfg["neo4j_uri"])
+NEO4J_USER = os.environ.get("NEO4J_USER", cfg["neo4j_user"])
+NEO4J_PASSWORD = os.environ.get("NEO4J_PASSWORD", cfg["neo4j_password"])
+
+# Ollama API 설정
+ollama.api_url = OLLAMA_API_URL
 
 # Neo4j 연결
-graph = Graph("bolt://neo4j:7687", auth=("neo4j", "password"))
+graph = Graph(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
 
-# Streamlit 설정
+# -----------------------------
+# Streamlit UI 설정
+# -----------------------------
 st.set_page_config(layout="wide")
 st.title("Neo4j DB 챗봇 질의")
 
@@ -33,11 +50,11 @@ for s in stations:
 
 st_folium(m, width=750, height=500)
 
-# UI
+# -----------------------------
+# 질문 입력 UI
+# -----------------------------
 st.sidebar.header("철도 연결 질문")
-user_question = st.sidebar.text_input(
-    "예: 경부고속선으로 광명에서 서울 가나?"
-)
+user_question = st.sidebar.text_input("예: 경부고속선으로 광명에서 서울 가?")
 
 if user_question:
     start_time = time.perf_counter()
@@ -61,7 +78,7 @@ if user_question:
 """
 
         extract_resp = ollama.chat(
-            model="llama3",
+            model=OLLAMA_MODEL,
             messages=[
                 {"role": "system", "content": "역 이름만 추출한다."},
                 {"role": "user", "content": prompt_extract}
@@ -76,14 +93,13 @@ if user_question:
         start_kw = data["from"]
         end_kw = data["to"]
 
-        # 2. 고정된 Cypher
+        # 2. Cypher 쿼리 실행
         cypher_query = f"""
         MATCH (a:Station)-[:CONNECTS]->(b:Station)
         WHERE a.name CONTAINS "{start_kw}"
           AND b.name CONTAINS "{end_kw}"
         RETURN count(*) > 0 AS is_connected
         """
-
         st.sidebar.subheader("실행 Cypher (Debug.2)")
         st.sidebar.code(cypher_query, language="cypher")
 
@@ -92,7 +108,7 @@ if user_question:
 
         elapsed = time.perf_counter() - start_time
 
-        # 3. 출력
+        # 3. 결과 출력
         if is_connected:
             st.sidebar.success("두 역은 연결되어 있습니다.")
         else:
