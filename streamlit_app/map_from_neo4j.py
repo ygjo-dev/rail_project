@@ -1,4 +1,9 @@
+import sys
 import os
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
 import json
 import time
 import streamlit as st
@@ -8,9 +13,17 @@ from streamlit_folium import st_folium
 import ollama
 
 # -----------------------------
+# 내부 모듈 import
+# -----------------------------
+from intent.intents import CHECK_CONNECTIVITY
+from cypher.connectivity import check_connectivity
+from intent.parser import parse_intent
+from intent.answer_generator import generate_answer
+
+# -----------------------------
 # 환경 변수 및 설정 파일 로드
 # -----------------------------
-CONFIG_FILE = os.environ.get("CONFIG_FILE", "../config/config.json")
+CONFIG_FILE = os.environ.get("CONFIG_FILE", "./config/config.json")
 with open(CONFIG_FILE, "r", encoding="utf-8") as f:
     cfg = json.load(f)
 
@@ -27,7 +40,7 @@ ollama.api_url = OLLAMA_API_URL
 graph = Graph(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
 
 # -----------------------------
-# Streamlit UI 설정
+# Streamlit UI 설정 (변경 없음)
 # -----------------------------
 st.set_page_config(layout="wide")
 st.title("Neo4j DB 챗봇 질의")
@@ -54,66 +67,56 @@ st_folium(m, width=750, height=500)
 # 질문 입력 UI
 # -----------------------------
 st.sidebar.header("철도 연결 질문")
-user_question = st.sidebar.text_input("예: 경부고속선으로 광명에서 서울 가?")
+user_question = st.sidebar.text_input("예: 서울에서 영등포가?")
 
 if user_question:
     start_time = time.perf_counter()
 
     try:
-        # 1. LLM: 역 이름만 추출
-        prompt_extract = f"""
-질문에서 출발역과 도착역 이름만 추출하라.
+        # -----------------------------
+        # 1. LLM: intent + slot 추출
+        # -----------------------------
+        parsed = parse_intent(user_question, OLLAMA_MODEL)
 
-규칙:
-- 역 이름만 출력
-- 괄호 포함 허용
-- 한국어 그대로
-- JSON 형식만 출력
+        st.sidebar.subheader("LLM 파싱 결과 (Debug)")
+        st.sidebar.json(parsed)
 
-형식:
-{{"from": "...", "to": "..."}}
+        # -----------------------------
+        # 2. 정보 부족 시 역질문
+        # -----------------------------
+        if parsed["missing_info"]:
+            st.sidebar.warning(
+                f"추가 정보가 필요합니다: {', '.join(parsed['missing_info'])}"
+            )
 
-질문:
-"{user_question}"
-"""
+        # -----------------------------
+        # 3. Intent별 고정 로직 실행
+        # -----------------------------
+        else:
+            intent = parsed["intent"]
 
-        extract_resp = ollama.chat(
-            model=OLLAMA_MODEL,
-            messages=[
-                {"role": "system", "content": "역 이름만 추출한다."},
-                {"role": "user", "content": prompt_extract}
-            ]
-        )
+            if intent == CHECK_CONNECTIVITY:
+                is_connected = check_connectivity(
+                    graph,
+                    parsed["from_station"],
+                    parsed["to_station"]
+                )
 
-        extracted = extract_resp["message"]["content"]
-        st.sidebar.subheader("LLM 추출 결과 (Debug.1)")
-        st.sidebar.code(extracted, language="json")
+                response_context = {
+                    "intent": intent,
+                    "from_station": parsed["from_station"],
+                    "to_station": parsed["to_station"],
+                    "is_connected": is_connected
+                }
 
-        data = eval(extracted)
-        start_kw = data["from"]
-        end_kw = data["to"]
-
-        # 2. Cypher 쿼리 실행
-        cypher_query = f"""
-        MATCH (a:Station)-[:CONNECTS]->(b:Station)
-        WHERE a.name CONTAINS "{start_kw}"
-          AND b.name CONTAINS "{end_kw}"
-        RETURN count(*) > 0 AS is_connected
-        """
-        st.sidebar.subheader("실행 Cypher (Debug.2)")
-        st.sidebar.code(cypher_query, language="cypher")
-
-        result = graph.run(cypher_query).data()
-        is_connected = result and result[0]["is_connected"]
+                answer = generate_answer(response_context, OLLAMA_MODEL)
+                st.sidebar.markdown(answer)
+            else:
+                st.sidebar.info(
+                    f"Debug: 아직 지원하지 않는 질문 유형입니다: {intent}" #TODO: 질문 유형 생성 필요
+                )
 
         elapsed = time.perf_counter() - start_time
-
-        # 3. 결과 출력
-        if is_connected:
-            st.sidebar.success("두 역은 연결되어 있습니다.")
-        else:
-            st.sidebar.warning("두 역은 연결되어 있지 않습니다.")
-
         st.sidebar.info(f"처리 시간: {elapsed:.2f}초")
 
     except Exception as e:

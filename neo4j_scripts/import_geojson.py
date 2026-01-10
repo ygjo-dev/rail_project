@@ -31,18 +31,20 @@ with open(GEOJSON_PATH, "r", encoding="utf-8") as f:
 transformer = Transformer.from_crs("EPSG:5179", "EPSG:4326", always_xy=True)
 
 # -----------------------------
-# 노드/관계 생성
+# 노드 / 관계 생성
 # -----------------------------
-for feature in geojson_data['features']:
-    props = feature['properties']
+for feature in geojson_data["features"]:
+    props = feature["properties"]
 
-    # 출발/도착 좌표 계산
-    start_x, start_y = feature['geometry']['coordinates'][0][0]
-    end_x, end_y = feature['geometry']['coordinates'][0][-1]
+    # 출발 / 도착 좌표
+    start_x, start_y = feature["geometry"]["coordinates"][0][0]
+    end_x, end_y = feature["geometry"]["coordinates"][0][-1]
     start_lon, start_lat = transformer.transform(start_x, start_y)
     end_lon, end_lat = transformer.transform(end_x, end_y)
 
-    # Station 노드 생성
+    # -----------------------------
+    # Station 노드
+    # -----------------------------
     start_station = Node(
         "Station",
         name=props["F_NAME"],
@@ -57,28 +59,50 @@ for feature in geojson_data['features']:
         lat=end_lat,
         lon=end_lon
     )
+
     graph.merge(start_station, "Station", "code")
     graph.merge(end_station, "Station", "code")
 
-    # RailLine 노드 생성
+    # -----------------------------
+    # RailLine 노드
+    # -----------------------------
     line_name = props.get("R_NAME_1") or "Unknown Line"
     rail_line = Node("RailLine", name=line_name)
     graph.merge(rail_line, "RailLine", "name")
 
-    # 역 <-> 노선 연결
+    # -----------------------------
+    # Segment 노드 (속성 전담, merge 기준 명확)
+    # -----------------------------
+    segment = Node(
+        "Segment",
+        from_code=props["AF_F_N"],
+        to_code=props["AF_T_N"],
+        line=line_name,
+        avg_dist=props["AVG_DIST"],
+        avg_time=props["AVG_TIME"],
+        speed=props["speed"],
+        isKTX=props["isKTX"]
+    )
+
+    graph.merge(segment, "Segment", ("from_code", "to_code", "line"))
+
+    # -----------------------------
+    # Segment 관계
+    # -----------------------------
+    graph.merge(Relationship(start_station, "HAS_SEGMENT", segment))
+    graph.merge(Relationship(segment, "TO", end_station))
+    graph.merge(Relationship(segment, "ON_LINE", rail_line))
+
+    # -----------------------------
+    # Station ↔ Station (경로 탐색용 핵심)
+    # -----------------------------
+    graph.merge(Relationship(start_station, "CONNECTS", end_station))
+    graph.merge(Relationship(end_station, "CONNECTS", start_station))
+
+    # -----------------------------
+    # Station ↔ RailLine (보조 질의용)
+    # -----------------------------
     graph.merge(Relationship(start_station, "ON_LINE", rail_line))
     graph.merge(Relationship(end_station, "ON_LINE", rail_line))
 
-    # 역 <-> 역 관계
-    connect_props = {
-        "avg_dist": props["AVG_DIST"],
-        "avg_time": props["AVG_TIME"],
-        "speed": props["speed"],
-        "isKTX": props["isKTX"]
-    }
-    rel1 = Relationship(start_station, "CONNECTS", end_station, **connect_props)
-    rel2 = Relationship(end_station, "CONNECTS", start_station, **connect_props)
-    graph.merge(rel1)
-    graph.merge(rel2)
-
-print("GeoJSON → Neo4j 완료!")
+print("GeoJSON → Neo4j (CONNECTS + Segment 모델) 변환 완료!")

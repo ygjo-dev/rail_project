@@ -1,0 +1,15 @@
+# intent/intents.py
+
+CHECK_CONNECTIVITY = "CHECK_CONNECTIVITY"   # 이동 가능 여부
+#CHECK_DIRECT = "CHECK_DIRECT"               # 직행 여부
+COUNT_TRANSFERS = "COUNT_TRANSFERS"         # 환승 횟수
+LIST_LINES = "LIST_LINES"                   # 노선 정보
+CHECK_STATION_VALID = "CHECK_STATION_VALID" # 역 존재 여부
+
+ALL_INTENTS = [
+    CHECK_CONNECTIVITY,
+#    CHECK_DIRECT,
+    COUNT_TRANSFERS,
+    LIST_LINES,
+    CHECK_STATION_VALID,
+]
