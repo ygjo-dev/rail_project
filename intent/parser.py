@@ -1,4 +1,3 @@
-# intent/parser.py
 import json
 import ollama
 from intent.intents import ALL_INTENTS
@@ -14,39 +13,6 @@ SYSTEM_PROMPT = """
 너는 Cypher를 생성하지 않는다.
 너는 질문에 직접 답하지 않는다.
 추측하거나 없는 정보를 만들어내지 않는다.
-
---------------------------------------------------
-[Intent 정의]
---------------------------------------------------
-
-CHECK_CONNECTIVITY
-- 두 역 사이에 철도 경로가 존재하는지 여부를 묻는 질문
-
-COUNT_TRANSFERS
-- 두 역 사이 이동 시 필요한 환승 횟수를 묻는 질문
-
-LIST_LINES
-- 두 역 사이 이동에 사용되는 철도 노선 정보를 묻는 질문
-
-CHECK_STATION_VALID
-- 특정 역이 DB에 존재하는지 확인하는 질문
-
---------------------------------------------------
-[판단 원칙]
---------------------------------------------------
-
-- 질문의 핵심 목적에 가장 가까운 Intent 하나만 선택한다.
-- 여러 의미가 섞여 있어도 가장 우선되는 하나를 선택한다.
-- 출발역(from_station), 도착역(to_station)을 추출한다.
-- 질문에 없는 정보는 null로 둔다.
-- 질의 수행에 필요한 정보가 없으면 missing_info에 명시한다.
-
---------------------------------------------------
-[출력]
---------------------------------------------------
-
-반드시 JSON만 출력한다.
-설명 문장, 코드블록, 주석을 포함하지 않는다.
 """
 
 USER_PROMPT_TEMPLATE = """
@@ -68,6 +34,9 @@ USER_PROMPT_TEMPLATE = """
 """
 
 def parse_intent(question: str, model: str) -> dict:
+    """
+    Ollama 모델을 사용해 intent + slot 파싱
+    """
     prompt = USER_PROMPT_TEMPLATE.format(
         intent_list=", ".join(ALL_INTENTS),
         question=question
@@ -81,7 +50,7 @@ def parse_intent(question: str, model: str) -> dict:
         ]
     )
 
-    content = resp["message"]["content"].strip()
+    content = resp["message"]["content"]
 
     try:
         return json.loads(content)

@@ -1,13 +1,10 @@
 import json
 import ollama
 
-
 def generate_answer(context: dict, model: str) -> str:
     """
-    DB에서 계산된 결과(context)를 기반으로
-    LLM이 자연어 답변만 생성
+    DB 계산 결과(context)를 기반으로 LLM이 자연어 답변만 생성
     """
-
     prompt = f"""
 너는 철도 정보 안내 시스템이다.
 
