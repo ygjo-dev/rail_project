@@ -1,5 +1,6 @@
 import sys
 import os
+
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
@@ -15,8 +16,9 @@ import ollama
 # -----------------------------
 # 내부 모듈 import
 # -----------------------------
-from intent.intents import CHECK_CONNECTIVITY
+from intent.intents import ALL_INTENTS
 from cypher.connectivity import check_connectivity
+from cypher.transfers import count_transfers
 from intent.parser import parse_intent
 from intent.answer_generator import generate_answer
 
@@ -35,10 +37,7 @@ NEO4J_URI = cfg["neo4j"]["uri"]
 NEO4J_USER = cfg["neo4j"]["user"]
 NEO4J_PASSWORD = cfg["neo4j"]["password"]
 
-# Ollama API 설정
 ollama.api_url = OLLAMA_API_URL
-
-# Neo4j 연결
 graph = Graph(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
 
 # -----------------------------
@@ -71,11 +70,9 @@ user_question = st.sidebar.text_input("예: 서울에서 영등포 가요?")
 
 if user_question:
     total_start = time.perf_counter()
-
+    
     try:
-        # -----------------------------
-        # 1. Intent / Slot 파싱 (parser용 모델)
-        # -----------------------------
+        # 1. Intent / Slot 파싱
         parse_start = time.perf_counter()
         parsed = parse_intent(user_question, PARSER_MODEL)
         parse_elapsed = time.perf_counter() - parse_start
@@ -83,53 +80,59 @@ if user_question:
         st.sidebar.subheader("LLM 파싱 결과 (Debug)")
         st.sidebar.json(parsed)
 
-        # -----------------------------
-        # 2. 정보 부족 시 경고
-        # -----------------------------
-        intent = None
-        db_elapsed = None
-        answer_elapsed = None
-
-        if parsed["missing_info"]:
+        # 2. 누락 정보 체크
+        if parsed.get("missing_info"):
             st.sidebar.warning(
                 f"추가 정보가 필요합니다: {', '.join(parsed['missing_info'])}"
             )
-        else:
-            intent = parsed["intent"]
-            if intent == CHECK_CONNECTIVITY:
-                db_start = time.perf_counter()
-                is_connected = check_connectivity(
+
+        # 3. DB 조회 (intent별 로직)
+        context = {"intent": parsed.get("intent")}
+        db_start = time.perf_counter()
+        
+        if parsed.get("intent") == "CHECK_CONNECTIVITY":
+            context.update({
+                "from_station": parsed.get("from_station"),
+                "to_station": parsed.get("to_station"),
+                "is_connected": check_connectivity(
                     graph,
-                    parsed["from_station"],
-                    parsed["to_station"]
+                    parsed.get("from_station"),
+                    parsed.get("to_station")
                 )
-                db_elapsed = time.perf_counter() - db_start
+            })
+        
+        elif parsed.get("intent") == "COUNT_TRANSFERS":
+            transfers = count_transfers(
+                graph,
+                parsed.get("from_station"),
+                parsed.get("to_station")
+            )
+            context.update({
+                "from_station": parsed.get("from_station"),
+                "to_station": parsed.get("to_station"),
+                "transfers": transfers
+            })
+        
+        db_elapsed = time.perf_counter() - db_start
 
-                response_context = {
-                    "intent": intent,
-                    "from_station": parsed["from_station"],
-                    "to_station": parsed["to_station"],
-                    "is_connected": is_connected
-                }
+        # 4. 자연어 응답 생성
+        answer_start = time.perf_counter()
+        answer = generate_answer(context, ANSWER_MODEL)
+        answer_elapsed = time.perf_counter() - answer_start
 
-                answer_start = time.perf_counter()
-                answer = generate_answer(response_context, ANSWER_MODEL)
-                answer_elapsed = time.perf_counter() - answer_start
+        st.sidebar.markdown(answer)
 
-                st.sidebar.markdown(answer)
-
-        # 총 처리 시간
+        # -----------------------------
+        # 처리 시간 표시
+        # -----------------------------
         total_elapsed = time.perf_counter() - total_start
         st.sidebar.info(f"총 처리 시간: {total_elapsed:.2f}초")
         st.sidebar.info(f"  • 파싱 시간: {parse_elapsed:.2f}초 ({PARSER_MODEL})")
-
-        if intent == CHECK_CONNECTIVITY and db_elapsed is not None and answer_elapsed is not None:
-            st.sidebar.info(f"  • DB 조회 시간: {db_elapsed:.2f}초")
-            st.sidebar.info(f"  • 응답 생성 시간: {answer_elapsed:.2f}초 ({ANSWER_MODEL})")
+        st.sidebar.info(f"  • DB 조회 시간: {db_elapsed:.2f}초")
+        st.sidebar.info(f"  • 응답 생성 시간: {answer_elapsed:.2f}초 ({ANSWER_MODEL})")
 
     except Exception as e:
         total_elapsed = time.perf_counter() - total_start
         st.sidebar.error("오류 발생")
         st.sidebar.code(str(e))
         st.sidebar.info(f"총 처리 시간: {total_elapsed:.2f}초")
-
