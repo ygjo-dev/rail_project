@@ -86,15 +86,17 @@ if user_question:
         # -----------------------------
         # 2. 정보 부족 시 경고
         # -----------------------------
+        intent = None
+        db_elapsed = None
+        answer_elapsed = None
+
         if parsed["missing_info"]:
             st.sidebar.warning(
                 f"추가 정보가 필요합니다: {', '.join(parsed['missing_info'])}"
             )
         else:
             intent = parsed["intent"]
-
             if intent == CHECK_CONNECTIVITY:
-                # DB 질의
                 db_start = time.perf_counter()
                 is_connected = check_connectivity(
                     graph,
@@ -110,25 +112,18 @@ if user_question:
                     "is_connected": is_connected
                 }
 
-                # -----------------------------
-                # 3. 자연어 응답 생성 (answer용 모델)
-                # -----------------------------
                 answer_start = time.perf_counter()
                 answer = generate_answer(response_context, ANSWER_MODEL)
                 answer_elapsed = time.perf_counter() - answer_start
 
                 st.sidebar.markdown(answer)
-            else:
-                st.sidebar.info(f"아직 지원하지 않는 질문 유형입니다: {intent}")
 
+        # 총 처리 시간
         total_elapsed = time.perf_counter() - total_start
-
-        # -----------------------------
-        # 처리 시간 표시
-        # -----------------------------
         st.sidebar.info(f"총 처리 시간: {total_elapsed:.2f}초")
         st.sidebar.info(f"  • 파싱 시간: {parse_elapsed:.2f}초 ({PARSER_MODEL})")
-        if intent == CHECK_CONNECTIVITY:
+
+        if intent == CHECK_CONNECTIVITY and db_elapsed is not None and answer_elapsed is not None:
             st.sidebar.info(f"  • DB 조회 시간: {db_elapsed:.2f}초")
             st.sidebar.info(f"  • 응답 생성 시간: {answer_elapsed:.2f}초 ({ANSWER_MODEL})")
 
