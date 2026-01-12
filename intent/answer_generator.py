@@ -14,7 +14,9 @@ def generate_answer(context: dict, model: str) -> str:
 - JSON에 없는 정보는 절대 추측하지 말 것
 - 단정적으로 말할 것
 - 불필요한 설명은 하지 말 것
-- 한국어로 답변할 것
+- 답변에는 한자를 절대 사용하지 말 것
+- 숫자는 반드시 아라비아 숫자로 표기할 것
+- 모든 단어는 현대 한국어 표기만 사용할 것
 
 JSON:
 {json.dumps(context, ensure_ascii=False, indent=2)}
