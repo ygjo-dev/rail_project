@@ -1,0 +1,17 @@
+neo4j:
+  uri: bolt://neo4j:7687
+  user: YOUR_ID_HERE            # config.yaml 생성 시 실제 ID로 변경 (예: neo4j)
+  password: YOUR_PASSWORD_HERE  # config.yaml 생성 시 실제 비밀번호로 변경
+
+# GeoJSON 데이터 파일 경로
+geojson_path: "../data/2020_전국철도_utmk.geojson"
+
+ollama:
+  # Docker 네트워크 내부 통신용 URL
+  api_url: http://ollama-env:11434
+
+  # 의도(Intent) 파싱용 모델
+  parser_model: llama3:latest
+
+  # 최종 답변 생성용 모델
+  answer_model: qwen2.5:3b-instruct

@@ -1,2 +1,5 @@
+ollama_storage/
+config/config.yaml
 data/
-config/
+.env
+__pycache__/

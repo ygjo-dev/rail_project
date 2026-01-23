@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  neo4j:
+    image: neo4j:5
+    container_name: neo4j
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      - NEO4J_AUTH=neo4j/password
+    networks:
+      - railnet
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama-env
+    ports:
+      - "11434:11434"
+    volumes:
+      - ./ollama_storage:/root/.ollama
+    entrypoint: [ "/bin/sh", "-c", "ollama serve & sleep 5 && ollama pull qwen2.5:3b-instruct && ollama pull llama3:latest && wait" ]
+    networks:
+      - railnet
+
+  streamlit:
+    build: .
+    container_name: streamlit-env
+    ports:
+      - "8501:8501"
+    volumes:
+      - .:/app
+    environment:
+      - PROJECT_PATH=/app
+      - OLLAMA_HOST=http://ollama-env:11434
+    networks:
+      - railnet
+    depends_on:
+      - neo4j
+      - ollama
+
+networks:
+  railnet:
+    driver: bridge
