@@ -93,15 +93,11 @@ def parse_intent(question: str, model: str) -> dict:
     except Exception:
         raise ValueError(f"LLM output parse error: {content}")
 
-    # -----------------------------
     # 후처리: intent 기본값
-    # -----------------------------
     if not parsed.get("intent"):
         parsed["intent"] = "null"
 
-    # -----------------------------
     # 후처리: missing_info 검증
-    # -----------------------------
     missing = []
     for slot in ["from_station", "to_station"]:
         if parsed.get(slot) is None:

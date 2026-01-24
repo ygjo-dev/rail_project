@@ -1,10 +1,10 @@
 neo4j:
   uri: bolt://neo4j:7687
-  user: YOUR_ID_HERE            # config.yaml 생성 시 실제 ID로 변경 (예: neo4j)
-  password: YOUR_PASSWORD_HERE  # config.yaml 생성 시 실제 비밀번호로 변경
+  user: 아이디        # neo4j서버 실제 아이디 입력 (예: neo4j)
+  password: 비밀번호  # neo4j서버 실제 비밀번호 입력
 
 # GeoJSON 데이터 파일 경로
-geojson_path: "../data/2020_전국철도_utmk.geojson"
+geojson_path: "data/{데이터이름}.geojson" # data/폴더 아래의 geojson 데이터 경로 입력 (예: 2020_전국철도_utmk.geojson)
 
 ollama:
   # Docker 네트워크 내부 통신용 URL

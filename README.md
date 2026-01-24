@@ -57,8 +57,10 @@
    PROJECT_PATH=.
    ```
 3. **데이터 및 설정 준비:**
-   - 'data/' 폴더에 '{데이터이름}.geojson' 파일을 추가
-   - 'config/config.template.yaml'을 복사하여 'config/config.yaml'을 생성하고 접속 정보를 입력
+   - 데이터 획득: 본 프로젝트에 사용된 철도 .geojson 파일은 저작권 및 용량 관계로 저장소에 포함되어 있지 않습니다. 데이터가 필요하신 분은 아래 메일로 요청해 주시기 바랍니다.
+      - ygjo0gon@gmail.com
+   - 'data/' 폴더에 '{데이터이름}.geojson' 데이터를 추가
+   - 'config/config.template.yaml'을 복사하여 'config/config.yaml'을 생성하고 본인의 Neo4j 접속 정보를 입력
 4. **환경 구축 및 실행:**
    모든 서비스 빌드 및 실행 (Neo4j, Ollama, Streamlit)
    
@@ -76,4 +78,5 @@
    docker exec -it streamlit-env python neo4j_scripts/import_geojson.py
    ```
 6. **서비스 접속:**
-   - 웹 브라우저에서 http://localhost:8501 접속
+   - 웹 인터페이스: http://localhost:8501
+   - (참고) DB 상태 확인용 Neo4j 서버: http://localhost:7474 

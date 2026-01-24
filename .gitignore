@@ -1,5 +1,16 @@
-ollama_storage/
-config/config.yaml
-data/
+# 환경 설정 및 비밀번호
 .env
+config/config.yaml
+
+# 대용량 데이터 및 모델
+data/
+ollama_storage/
+
+# 파이썬 실행 부산물
 __pycache__/
+*.py[cod]
+*$py.class
+
+# OS 관련 파일
+.DS_Store
+Thumbs.db
